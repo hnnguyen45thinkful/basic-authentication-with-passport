@@ -1,5 +1,14 @@
+var express = require('express');
+var bodyParser = require('body-parser');
+var mongoose = require('mongoose');
+var User = require('./user-model');
+var bcrypt = require('bcryptjs');
 var passport = require('passport');
 var BasicStrategy = require('passport-http').BasicStrategy;
+
+var app = express();
+
+var jsonParser = bodyParser.json();
 
 var strategy = new BasicStrategy(function(username, password, callback) {
     User.findOne({
@@ -26,23 +35,20 @@ var strategy = new BasicStrategy(function(username, password, callback) {
                     message: 'Incorrect password.'
                 });
             }
+            
             return callback(null, user);
         });
     });
 });
 
 passport.use(strategy);
+app.use(passport.initialize());
 
-
-
-var express = require('express');
-var bodyParser = require('body-parser');
-var mongoose = require('mongoose');
-var User = require('./user-model');
-
-var app = express();
-
-var jsonParser = bodyParser.json();
+app.get('/hidden', passport.authenticate('basic', {session: false}), function(req, res) {
+    res.json({
+        message: 'Luke... I am your father'
+    });
+});
 
 app.post('/users', jsonParser, function(req, res) {
     if (!req.body) {
@@ -95,32 +101,39 @@ app.post('/users', jsonParser, function(req, res) {
         });
     }
 
-    var user = new User({
-        username: username,
-        password: password
-    });
-
-    user.save(function(err) {
+    bcrypt.genSalt(10, function(err, salt) {
         if (err) {
             return res.status(500).json({
-                message: 'Internal server error'
+                message: 'Internal server error 1'
             });
         }
 
-        return res.status(201).json({});
+        bcrypt.hash(password, salt, function(err, hash) {
+            if (err) {
+                return res.status(500).json({
+                    message: 'Internal server error 2'
+                });
+            }
+
+            var user = new User({
+                username: username,
+                password: hash
+            });
+
+            user.save(function(err) {
+                if (err) {
+                    return res.status(500).json({
+                        message: 'Internal server error 3'
+                    });
+                }
+
+                return res.status(201).json({});
+            });
+        });
     });
 });
-
-app.use(passport.initialize());
-
-
-app.get('/hidden', passport.authenticate('basic', {session: false}), function(req, res) {
-    res.json({
-        message: 'Luke... I am your father'
-    });
-});
-
 
 mongoose.connect('mongodb://localhost/auth').then(function() {
     app.listen(process.env.PORT || 8080);
+    console.log('Server is running at http://localhost:8080');
 });
